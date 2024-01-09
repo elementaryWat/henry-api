@@ -1,19 +1,22 @@
-// Next.js API route support: https://nextjs.org/docs/api-routes/introduction
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { MemoryVectorStore } from "langchain/vectorstores/memory";
 import { OpenAIEmbeddings } from "@langchain/openai";
 import { TextLoader } from "langchain/document_loaders/fs/text";
 import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
+import { RetrievalQAChain } from "langchain/chains";
+import { ChatOpenAI } from "@langchain/openai";
 
-type Data = {
-  response: string
-}
 
 export default async function handler(
   req: NextApiRequest,
-  res: NextApiResponse<Data>
+  res: NextApiResponse
 ) {
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'Method Not Allowed' });
+    return;
+  }
 
+  const { question } = req.body;
 
   // Create docs with a loader
   const loader = new TextLoader("src/knowledge/henryFAQ.txt");
@@ -33,8 +36,11 @@ export default async function handler(
   );
 
   // Search for the most similar document
-  const resultOne = await vectorStore.similaritySearch("cual es su mision", 1);
+  const model = new ChatOpenAI({ modelName: "gpt-3.5-turbo" });
+  const chain = RetrievalQAChain.fromLLM(model, vectorStore.asRetriever());
+  const response = await chain.invoke({
+    query: question,
+  });
 
-  console.log(resultOne);
-  res.status(200).json({ response: resultOne[0].pageContent })
+  res.status(200).json({ response: response.text })
 }
